@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Drone Simulator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a0a0a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* Minimal top control bar */
+        #topControls {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px 30px;
+            border-radius: 25px;
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            backdrop-filter: blur(15px);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        /* Compact telemetry overlay */
+        #telemetryOverlay {
+            position: absolute;
+            /* moved slightly lower so it doesn't overlap top controls/buttons */
+            top: 80px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 255, 65, 0.2);
+            color: #00ff41;
+            font-size: 12px;
+            min-width: 200px;
+            backdrop-filter: blur(10px);
+        }
+        
+        /* Status indicator */
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-connected { background: #00ff41; box-shadow: 0 0 10px #00ff41; }
+        .status-disconnected { background: #ff4141; }
+        .status-active { background: #ffaa00; animation: pulse 1s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Buttons */
+        .btn {
+            background: rgba(0, 30, 0, 0.8);
+            border: 2px solid #00ff41;
+            color: #00ff41;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        .btn:hover {
+            background: #00ff41;
+            color: #000;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+        }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            border-color: #ff4141;
+            color: #ff4141;
+        }
+        .btn-danger:hover {
+            background: #ff4141;
+            color: #fff;
+        }
+        
+        /* Info display */
+        .info-line {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .info-value {
+            color: #ffffff;
+            font-weight: bold;
+        }
+        
+        /* Console toggle */
+        #consoleToggle {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 101;
+        }
+        
+        #console {
+            position: absolute;
+            bottom: 70px;
+            right: 20px;
+            width: 400px;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            border-radius: 8px;
+            color: #00ff41;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            padding: 10px;
+            overflow-y: auto;
+            backdrop-filter: blur(15px);
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+        
+        #console.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .log-info { color: #00ff41; }
+        .log-warning { color: #ffaa00; }
+        .log-error { color: #ff4141; }
+        .log-python { color: #4da6ff; }
+
+        /* Toast notification */
+        #toast {
+            position: absolute;
+            top: 20px;
+            right: 50%;
+            transform: translateX(50%);
+            background: rgba(0,0,0,0.85);
+            color: #00ff41;
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,255,65,0.15);
+            display: none;
+            z-index: 200;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            backdrop-filter: blur(6px);
+        }
+        #toast.show { display: block; }
+        /* Camera settings panel */
+        .camera-settings {
+            position: absolute;
+            right: 20px;
+            bottom: 250px;
+            width: 280px;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid rgba(0,255,65,0.12);
+            color: #00ff41;
+            padding: 12px;
+            border-radius: 8px;
+            z-index: 250;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+        }
+        .camera-settings.hidden { display: none; }
+        .camera-settings h4 { margin: 0 0 8px 0; font-size: 13px; }
+        .camera-settings label { font-size: 12px; display:block; margin-top:8px; }
+        .camera-settings input[type=range] { width: 100%; }
+        .small-muted { font-size: 11px; color: rgba(255,255,255,0.45); }
+        .btn-ghost { background: transparent; border-color: rgba(255,255,255,0.08); }
+        /* Obstacle panel on the left */
+        #obstaclePanel {
+            position: absolute;
+            left: 20px;
+            top: 100px;
+            width: 300px;
+            max-height: 60vh;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid rgba(0,255,65,0.12);
+            color: #00ff41;
+            padding: 12px;
+            border-radius: 8px;
+            z-index: 260;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+            overflow: auto;
+        }
+        #obstaclePanel.hidden { display: none; }
+        #obstaclePanel h4 { margin: 0 0 8px 0; font-size: 13px; display:flex; justify-content:space-between; align-items:center }
+        #obstacleList { margin-top:8px; font-size:12px; max-height:200px; overflow:auto; }
+        .obstacle-entry { display:flex; justify-content:space-between; padding:4px 6px; border-radius:4px; margin-bottom:4px; background: rgba(255,255,255,0.02); }
+        /* Mini-map (bottom center) */
+        #miniMapWrap {
+            position: absolute;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 220;
+            background: rgba(0,0,0,0.7);
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,255,65,0.08);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+        }
+        #miniMap {
+            display: block;
+            width: 320px;
+            height: 140px;
+            background: transparent;
+            border-radius: 4px;
+        }
+    #miniLegend { font-size:11px; color:#00ff41; margin-top:6px; display:flex; gap:8px; justify-content:center; align-items:center }
+    #miniLegend button { font-size:11px; padding:3px 8px; border-radius:6px; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <!-- Minimal top controls -->
+        <div id="topControls">
+            <div style="display: flex; align-items: center; color: #00ff41;">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Disconnected</span>
+            </div>
+            <!-- Natural language input -->
+            <div style="display:flex; align-items:center; gap:8px;">
+                <input id="nlInput" type="text" placeholder="Type commands (e.g. 'take off', 'land', 'go to x 10 z -5')" style="width:320px; padding:8px; border-radius:8px; border:1px solid rgba(0,255,65,0.15); background: rgba(0,0,0,0.6); color:#00ff41;" />
+                <button class="btn" id="nlSendBtn">Send</button>
+                <span id="nlPending" title="Awaiting backend ack" style="display:none; color:#ffaa00; margin-left:6px;">⏳</span>
+            </div>
+            <button class="btn" id="connectBtn">Connect Python</button>
+            <button class="btn" id="startBtn" disabled>Start Mission</button>
+            <button class="btn btn-danger" id="stopBtn" disabled>Stop</button>
+            <button class="btn" id="resetBtn">Reset</button>
+            <button class="btn" id="autoRotateBtn" title="Toggle camera auto-rotation">Auto-Rotate: Off</button>
+            <button class="btn" id="cameraSettingsBtn" title="Camera settings">Camera</button>
+            <button class="btn" id="toggleObstaclePanelBtn" title="Toggle obstacle panel">Obstacles</button>
+            <button class="btn" id="topConsoleToggleBtn" title="Toggle console logs">Logs</button>
+        </div>
+    <!-- Toast notification -->
+    <div id="toast"></div>
+        <!-- Mini-map -->
+        <div id="miniMapWrap">
+            <canvas id="miniMap"></canvas>
+            <div id="miniLegend">
+                <span>● Drone</span>
+                <span style="color:#ffaa00">● Obstacles</span>
+                <button id="miniModeBtn" class="btn-ghost">Mode: Center</button>
+                <button id="miniResetFocusBtn" class="btn">Reset Focus</button>
+            </div>
+        </div>
+        
+        <!-- Compact telemetry -->
+        <div id="telemetryOverlay">
+            <div style="font-weight: bold; margin-bottom: 8px; color: #00ff41;">📡 TELEMETRY</div>
+            <div class="info-line">
+                <span>Position:</span>
+                <span class="info-value" id="posDisplay">0, 0, 0</span>
+            </div>
+            <div class="info-line">
+                <span>Velocity:</span>
+                <span class="info-value" id="velDisplay">0.0 m/s</span>
+            </div>
+            <div class="info-line">
+                <span>Altitude:</span>
+                <span class="info-value" id="altDisplay">0.0 m</span>
+            </div>
+            <div class="info-line">
+                <span>Battery:</span>
+                <span class="info-value" id="battDisplay">100%</span>
+            </div>
+            <div class="info-line">
+                <span>Flight Time:</span>
+                <span class="info-value" id="timeDisplay">00:00</span>
+            </div>
+        </div>
+        
+        <!-- Console toggle -->
+        <button class="btn" id="consoleToggle">Console</button>
+        <div id="console">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: bold;">🐍 PYTHON CONSOLE</span>
+                <button onclick="clearConsole()" style="background: none; border: none; color: #00ff41; cursor: pointer; font-size: 10px;">Clear</button>
+            </div>
+            <div id="consoleOutput"></div>
+        </div>
+        <!-- Camera settings panel (hidden by default) -->
+        <div id="cameraSettings" class="camera-settings hidden">
+            <h4>Camera Settings</h4>
+            <label>Rotate sensitivity: <span id="angleVal">0.006</span></label>
+            <input type="range" id="angleRange" min="0.001" max="0.05" step="0.001" value="0.006">
+            <label>Height sensitivity: <span id="heightVal">0.05</span></label>
+            <input type="range" id="heightRange" min="0.005" max="0.2" step="0.005" value="0.05">
+            <label>Zoom sensitivity: <span id="zoomVal">0.02</span></label>
+            <input type="range" id="zoomRange" min="0.002" max="0.08" step="0.002" value="0.02">
+            <div style="display:flex; justify-content:space-between; margin-top:8px;">
+                <button class="btn" id="cameraResetBtn">Reset</button>
+                <button class="btn btn-ghost" id="cameraCloseBtn">Close</button>
+            </div>
+            <div class="small-muted" style="margin-top:8px;">Pinch to zoom on touch. Drag to rotate.</div>
+        </div>
+        
+        <!-- Obstacle panel -->
+        <div id="obstaclePanel">
+            <h4>Obstacles <span id="obstacleCount">0</span></h4>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+                <button class="btn" id="addObstacleBtn">Add Obstacle</button>
+                <button class="btn btn-ghost" id="clearObstaclesBtn">Clear</button>
+            </div>
+            <div class="small-muted">Click "Add Obstacle" to place a random pillar. Use Clear to remove all.</div>
+            <div id="obstacleList"></div>
+        </div>
+    </div>
+
+    <script>
+        // Scene setup with better view
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x001122, 100, 400);
+        
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x001122, 1);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('container').appendChild(renderer.domElement);
+
+        // Enhanced lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        directionalLight.position.set(100, 100, 50);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 4096;
+        directionalLight.shadow.mapSize.height = 4096;
+        directionalLight.shadow.camera.left = -150;
+        directionalLight.shadow.camera.right = 150;
+        directionalLight.shadow.camera.top = 150;
+        directionalLight.shadow.camera.bottom = -150;
+        scene.add(directionalLight);
+
+        // Better environment
+        const groundGeometry = new THREE.PlaneGeometry(400, 400);
+        const groundMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0x1a4d1a,
+            transparent: true,
+            opacity: 0.9
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Subtle grid
+        const gridHelper = new THREE.GridHelper(400, 80, 0x00ff41, 0x004400);
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.15;
+        scene.add(gridHelper);
+
+        // Create enhanced drone
+        function createDrone() {
+            const droneGroup = new THREE.Group();
+            
+            // Main body - more detailed
+            const bodyGeometry = new THREE.BoxGeometry(3, 0.8, 3);
+            const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x2a2a2a,
+                shininess: 100
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.castShadow = true;
+            droneGroup.add(body);
+            
+            // Camera gimbal
+            const gimbalGeometry = new THREE.SphereGeometry(0.4);
+            const gimbalMaterial = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
+            const gimbal = new THREE.Mesh(gimbalGeometry, gimbalMaterial);
+            gimbal.position.set(0, -0.6, 0);
+            droneGroup.add(gimbal);
+            
+            // Propellers with better design
+            const propellers = [];
+            const propPositions = [
+                [-2, 0.5, -2], [2, 0.5, -2],
+                [-2, 0.5, 2], [2, 0.5, 2]
+            ];
+            
+            propPositions.forEach((pos, i) => {
+                // Motor mount
+                const motorGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.4);
+                const motorMaterial = new THREE.MeshPhongMaterial({ color: 0x404040 });
+                const motor = new THREE.Mesh(motorGeometry, motorMaterial);
+                motor.position.set(pos[0], pos[1], pos[2]);
+                droneGroup.add(motor);
+                
+                // Propeller
+                const propGeometry = new THREE.CylinderGeometry(1.2, 1.2, 0.03);
+                const propMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x00ff41, 
+                    transparent: true, 
+                    opacity: 0.8,
+                    emissive: 0x002200
+                });
+                const prop = new THREE.Mesh(propGeometry, propMaterial);
+                prop.position.set(pos[0], pos[1] + 0.3, pos[2]);
+                propellers.push(prop);
+                droneGroup.add(prop);
+            });
+            
+            // LED strips
+            const frontLED = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.1, 0.1),
+                new THREE.MeshPhongMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 })
+            );
+            frontLED.position.set(0, 0.5, -1.5);
+            droneGroup.add(frontLED);
+            
+            const rearLED = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.1, 0.1),
+                new THREE.MeshPhongMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.3 })
+            );
+            rearLED.position.set(0, 0.5, 1.5);
+            droneGroup.add(rearLED);
+            
+            droneGroup.propellers = propellers;
+            droneGroup.castShadow = true;
+            return droneGroup;
+        }
+
+        const drone = createDrone();
+        drone.position.set(0, 8, 0);
+        scene.add(drone);
+
+        // Obstacles: stored as { mesh, position: THREE.Vector3, radius }
+        const obstacles = [];
+
+        function createObstacle(x = 0, z = 0, radius = 2, height = 4, color = 0x884400) {
+            const geom = new THREE.CylinderGeometry(radius, radius, height, 24);
+            const mat = new THREE.MeshPhongMaterial({ color, emissive: 0x220000, transparent: true, opacity: 0.95 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(x, height / 2, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            const obj = { mesh, position: mesh.position.clone(), radius };
+            obstacles.push(obj);
+            updateObstacleUI();
+            return obj;
+        }
+
+        function addRandomObstacle() {
+            const x = (Math.random() - 0.5) * 140;
+            const z = (Math.random() - 0.5) * 140;
+            const r = 1.0 + Math.random() * 3.5;
+            const h = 2 + Math.random() * 8;
+            createObstacle(x, z, r, h);
+            sendObstacles();
+            updateObstacleUI();
+        }
+
+        function clearObstacles() {
+            while (obstacles.length) {
+                const o = obstacles.pop();
+                scene.remove(o.mesh);
+            }
+            sendObstacles();
+            updateObstacleUI();
+        }
+
+        // Send obstacle list to backend (if connected) for logging or planning
+        function sendObstacles() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    const list = obstacles.map(o => ({ x: o.position.x, z: o.position.z, r: o.radius }));
+                    ws.send(JSON.stringify({ type: 'obstacles', obstacles: list }));
+                } catch (e) {
+                    logToConsole('Failed to send obstacles to backend: ' + e.message, 'warning');
+                }
+            }
+        }
+
+        // Update obstacle panel UI
+        function updateObstacleUI() {
+            const count = document.getElementById('obstacleCount');
+            const list = document.getElementById('obstacleList');
+            if (!count || !list) return;
+            count.textContent = String(obstacles.length);
+            list.innerHTML = '';
+            obstacles.forEach((o, i) => {
+                const entry = document.createElement('div');
+                entry.className = 'obstacle-entry';
+                const left = document.createElement('div');
+                left.textContent = `#${i+1} x:${o.position.x.toFixed(1)} z:${o.position.z.toFixed(1)}`;
+                const right = document.createElement('div');
+                right.textContent = `r:${o.radius.toFixed(1)}`;
+                entry.appendChild(left);
+                entry.appendChild(right);
+                list.appendChild(entry);
+            });
+        }
+
+        // Drone state
+        const droneState = {
+            position: new THREE.Vector3(0, 8, 0),
+            velocity: new THREE.Vector3(0, 0, 0),
+            rotation: new THREE.Euler(0, 0, 0),
+            isActive: false,
+            isConnected: false,
+            battery: 100,
+            startTime: 0,
+            // targetAltitude is used by altitude commands (takeoff/land). null means use default hover height.
+            targetAltitude: 8
+        };
+
+        // Python/WebSocket communication
+        let pythonConnected = false;
+        let missionActive = false;
+        let ws = null;
+        let telemetryIntervalId = null;
+
+        function connectToPython() {
+            const connectBtn = document.getElementById('connectBtn');
+            logToConsole('Connecting to Python backend...', 'info');
+            connectBtn.disabled = true;
+
+            try {
+                ws = new WebSocket('ws://localhost:8765');
+            } catch (e) {
+                logToConsole('WebSocket creation failed: ' + e.message, 'error');
+                connectBtn.disabled = false;
+                return;
+            }
+
+            ws.addEventListener('open', () => {
+                pythonConnected = true;
+                droneState.isConnected = true;
+                updateStatus();
+                logToConsole('✓ Connected to Python backend', 'python');
+                // send current obstacles to backend so it can plan or log
+                try { sendObstacles(); } catch (e) { /* ignore */ }
+                logToConsole('Ready to receive autonomous commands', 'info');
+
+                // start sending telemetry periodically
+                if (telemetryIntervalId === null) {
+                    telemetryIntervalId = setInterval(() => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            const msg = {
+                                type: 'telemetry',
+                                position: { x: droneState.position.x, y: droneState.position.y, z: droneState.position.z },
+                                velocity: { x: droneState.velocity.x, y: droneState.velocity.y, z: droneState.velocity.z },
+                                battery: droneState.battery,
+                                missionActive: missionActive
+                            };
+                            ws.send(JSON.stringify(msg));
+                        }
+                    }, 1000);
+                }
+            });
+
+            ws.addEventListener('message', (ev) => {
+                try {
+                    const data = JSON.parse(ev.data);
+                    if (data.type === 'command') {
+                        logToConsole(`🐍 ${data.data || data.action}`, 'python');
+                        applyPythonCommand(data);
+                    } else if (data.type === 'info') {
+                        logToConsole(data.message, 'info');
+                    } else if (data.type === 'ack') {
+                        // Acknowledgement from backend for NL input
+                        const msg = data.message || 'Backend acknowledged input';
+                        hidePendingIndicator();
+                        showToast(msg, 3000);
+                        logToConsole(`📨 Backend: ${msg}`, 'info');
+                        // optionally log the parsed command object
+                        if (data.command) {
+                            logToConsole(`📦 Backend parsed: ${JSON.stringify(data.command)}`, 'python');
+                        }
+                    }
+                } catch (err) {
+                    logToConsole('Malformed message from backend', 'warning');
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                pythonConnected = false;
+                droneState.isConnected = false;
+                updateStatus();
+                logToConsole('Disconnected from Python backend', 'warning');
+                if (telemetryIntervalId !== null) {
+                    clearInterval(telemetryIntervalId);
+                    telemetryIntervalId = null;
+                }
+                connectBtn.disabled = false;
+            });
+
+            ws.addEventListener('error', (err) => {
+                logToConsole('WebSocket error', 'error');
+                connectBtn.disabled = false;
+            });
+        }
+
+        function applyPythonCommand(command) {
+            const speed = 0.05;
+            switch(command.action) {
+                case 'patrol':
+                    droneState.velocity.x = (Math.random() - 0.5) * speed;
+                    droneState.velocity.z = (Math.random() - 0.5) * speed;
+                    break;
+                case 'hover':
+                    droneState.velocity.x *= 0.9;
+                    droneState.velocity.z *= 0.9;
+                    break;
+                case 'navigate':
+                    const targetX = (Math.random() - 0.5) * 40;
+                    const targetZ = (Math.random() - 0.5) * 40;
+                    droneState.velocity.x = (targetX - droneState.position.x) * 0.01;
+                    droneState.velocity.z = (targetZ - droneState.position.z) * 0.01;
+                    break;
+                case 'takeoff':
+                    // set a safe target altitude and activate mission
+                    droneState.targetAltitude = command.altitude !== undefined ? command.altitude : 20;
+                    missionActive = true;
+                    droneState.startTime = droneState.startTime || Date.now();
+                    updateStatus();
+                    break;
+                case 'land':
+                    // smoothly lower to ground and stop mission when reached
+                    droneState.targetAltitude = 0.5;
+                    break;
+                case 'move':
+                    // expects data.target {x,z} or command.target
+                    if (command.target && typeof command.target.x === 'number' && typeof command.target.z === 'number') {
+                        droneState.velocity.x = (command.target.x - droneState.position.x) * 0.02;
+                        droneState.velocity.z = (command.target.z - droneState.position.z) * 0.02;
+                    }
+                    break;
+            }
+        }
+
+        function updateDronePhysics(deltaTime) {
+            if (!missionActive) return;
+
+            // Simple obstacle avoidance (XZ plane): compute a repulsive steering vector
+            if (obstacles.length > 0) {
+                const avoidForce = new THREE.Vector3(0, 0, 0);
+                const safeDistance = 4.0; // additional safety margin
+                for (const o of obstacles) {
+                    const dx = droneState.position.x - o.position.x;
+                    const dz = droneState.position.z - o.position.z;
+                    const dist = Math.hypot(dx, dz);
+                    const minDist = o.radius + safeDistance;
+                    if (dist < minDist && dist > 0.0001) {
+                        // strength increases as drone gets closer
+                        const strength = (1 - dist / minDist) * 0.9;
+                        avoidForce.x += (dx / dist) * strength;
+                        avoidForce.z += (dz / dist) * strength;
+                    }
+                }
+                // apply small avoidance adjustment to velocity
+                droneState.velocity.x += avoidForce.x * 0.5;
+                droneState.velocity.z += avoidForce.z * 0.5;
+                // clamp velocity to reasonable bounds
+                const maxSpeed = 1.5;
+                const speed = Math.sqrt(droneState.velocity.x * droneState.velocity.x + droneState.velocity.z * droneState.velocity.z);
+                if (speed > maxSpeed) {
+                    droneState.velocity.x = (droneState.velocity.x / speed) * maxSpeed;
+                    droneState.velocity.z = (droneState.velocity.z / speed) * maxSpeed;
+                }
+            }
+
+            // Apply movement
+            droneState.position.add(droneState.velocity);
+            
+            // Altitude handling: smoothly approach targetAltitude if set
+            if (droneState.targetAltitude !== null && droneState.targetAltitude !== undefined) {
+                // approach target altitude smoothly
+                const dy = (droneState.targetAltitude - droneState.position.y) * 0.02;
+                droneState.position.y += dy;
+                // small natural bob on top for realism
+                droneState.position.y += Math.sin(Date.now() * 0.001) * 0.05;
+                // if landing reached, stop mission
+                if (droneState.targetAltitude <= 0.6 && Math.abs(droneState.position.y - droneState.targetAltitude) < 0.15) {
+                    missionActive = false;
+                    updateStatus();
+                    logToConsole('✅ Landed', 'info');
+                }
+            } else {
+                // default hover
+                droneState.position.y = 8 + Math.sin(Date.now() * 0.001) * 0.5;
+            }
+            
+            // Banking based on velocity
+            droneState.rotation.z = -droneState.velocity.x * 2;
+            droneState.rotation.x = droneState.velocity.z * 2;
+            
+            // Apply damping
+            droneState.velocity.multiplyScalar(0.98);
+            
+            // Update visual
+            drone.position.copy(droneState.position);
+            drone.rotation.copy(droneState.rotation);
+            
+            // Animate propellers
+            const speed = missionActive ? 25 : 5;
+            drone.propellers.forEach(prop => {
+                prop.rotation.y += deltaTime * speed;
+            });
+            
+            // Update battery
+            if (missionActive) {
+                droneState.battery = Math.max(0, droneState.battery - deltaTime * 0.1);
+            }
+        }
+
+        // UI Functions
+        function updateStatus() {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            if (pythonConnected) {
+                if (missionActive) {
+                    dot.className = 'status-dot status-active';
+                    text.textContent = 'Mission Active';
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                } else {
+                    dot.className = 'status-dot status-connected';
+                    text.textContent = 'Python Connected';
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                }
+            } else {
+                dot.className = 'status-dot status-disconnected';
+                text.textContent = 'Disconnected';
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+            }
+        }
+
+        function updateTelemetry() {
+            document.getElementById('posDisplay').textContent = 
+                `${droneState.position.x.toFixed(1)}, ${droneState.position.y.toFixed(1)}, ${droneState.position.z.toFixed(1)}`;
+            document.getElementById('velDisplay').textContent = 
+                `${droneState.velocity.length().toFixed(2)} m/s`;
+            document.getElementById('altDisplay').textContent = 
+                `${droneState.position.y.toFixed(1)} m`;
+            document.getElementById('battDisplay').textContent = 
+                `${droneState.battery.toFixed(0)}%`;
+            
+            const flightTime = missionActive ? (Date.now() - droneState.startTime) / 1000 : 0;
+            const minutes = Math.floor(flightTime / 60);
+            const seconds = Math.floor(flightTime % 60);
+            document.getElementById('timeDisplay').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Mini-map rendering (bottom): shows drone and obstacles in XZ plane
+        const miniMap = document.getElementById('miniMap');
+        let miniCtx = null;
+        const WORLD_SIZE = 400; // matches ground plane
+        const WORLD_HALF = WORLD_SIZE / 2;
+
+        // mini-map interaction state
+        let miniMapMode = 'center'; // 'center' or 'place'
+        let cameraFocusActive = false;
+        const cameraFocusPos = new THREE.Vector3();
+
+        // trail storage for drone path
+        const droneTrail = [];
+        let lastTrailTime = 0;
+        const TRAIL_INTERVAL = 0.15; // seconds between trail samples
+        const TRAIL_MAX = 300; // max samples
+
+        function initMiniMap() {
+            if (!miniMap) return;
+            miniCtx = miniMap.getContext('2d');
+            resizeMiniMap();
+            window.addEventListener('resize', resizeMiniMap);
+
+            // click handler: center camera or place obstacle depending on mode
+            miniMap.addEventListener('click', (ev) => {
+                const rect = miniMap.getBoundingClientRect();
+                const cssW = 320, cssH = 140;
+                const x = ev.clientX - rect.left;
+                const y = ev.clientY - rect.top;
+                const world = mapToWorld(x, y, cssW, cssH);
+                if (miniMapMode === 'place') {
+                    createObstacle(world.x, world.z, 2.0, 4.0);
+                    sendObstacles();
+                    logToConsole(`Placed obstacle at x:${world.x.toFixed(1)} z:${world.z.toFixed(1)}`, 'info');
+                } else {
+                    // center camera on the clicked world position
+                    cameraFocusPos.set(world.x, Math.max(2, droneState.position.y), world.z);
+                    cameraFocusActive = true;
+                    logToConsole(`Camera focus set to x:${world.x.toFixed(1)} z:${world.z.toFixed(1)}`, 'info');
+                }
+            });
+
+            // mode button
+            const miniModeBtn = document.getElementById('miniModeBtn');
+            if (miniModeBtn) miniModeBtn.addEventListener('click', () => {
+                miniMapMode = miniMapMode === 'center' ? 'place' : 'center';
+                miniModeBtn.textContent = `Mode: ${miniMapMode === 'center' ? 'Center' : 'Place'}`;
+                miniModeBtn.classList.toggle('btn-ghost', miniMapMode === 'place');
+            });
+
+            // reset focus button
+            const miniResetFocusBtn = document.getElementById('miniResetFocusBtn');
+            if (miniResetFocusBtn) miniResetFocusBtn.addEventListener('click', () => {
+                cameraFocusActive = false;
+                logToConsole('Camera focus reset to drone', 'info');
+            });
+        }
+
+        function resizeMiniMap() {
+            if (!miniMap) return;
+            const dpr = window.devicePixelRatio || 1;
+            const cssW = 320;
+            const cssH = 140;
+            miniMap.style.width = cssW + 'px';
+            miniMap.style.height = cssH + 'px';
+            miniMap.width = Math.floor(cssW * dpr);
+            miniMap.height = Math.floor(cssH * dpr);
+            if (miniCtx) {
+                miniCtx.setTransform(1,0,0,1,0,0); // reset
+                miniCtx.scale(dpr, dpr);
+            }
+        }
+
+        function worldToMap(x, z, width, height) {
+            // world coords X: [-WORLD_HALF, WORLD_HALF], Z: [-WORLD_HALF, WORLD_HALF]
+            const mx = ((x + WORLD_HALF) / WORLD_SIZE) * width;
+            // invert Z so positive Z is up on the map
+            const my = ((WORLD_HALF - z) / WORLD_SIZE) * height;
+            return { x: mx, y: my };
+        }
+
+        function mapToWorld(mx, my, width, height) {
+            const x = (mx / width) * WORLD_SIZE - WORLD_HALF;
+            const z = WORLD_HALF - (my / height) * WORLD_SIZE;
+            return { x, z };
+        }
+
+        function updateMiniMap() {
+            if (!miniCtx) return;
+            const cssW = 320, cssH = 140;
+            miniCtx.clearRect(0, 0, cssW, cssH);
+
+            // draw trail (if any)
+            if (droneTrail.length > 1) {
+                miniCtx.beginPath();
+                for (let i = 0; i < droneTrail.length; i++) {
+                    const p = worldToMap(droneTrail[i].x, droneTrail[i].z, cssW, cssH);
+                    if (i === 0) miniCtx.moveTo(p.x, p.y);
+                    else miniCtx.lineTo(p.x, p.y);
+                }
+                miniCtx.strokeStyle = 'rgba(0,255,65,0.9)';
+                miniCtx.lineWidth = 2;
+                miniCtx.stroke();
+                miniCtx.closePath();
+            }
+
+            // draw obstacles
+            obstacles.forEach(o => {
+                const p = worldToMap(o.position.x, o.position.z, cssW, cssH);
+                const pixelR = Math.max(3, (o.radius / WORLD_SIZE) * cssW * 1.2);
+                miniCtx.beginPath();
+                miniCtx.fillStyle = 'rgba(255,170,0,0.9)';
+                miniCtx.arc(p.x, p.y, pixelR, 0, Math.PI * 2);
+                miniCtx.fill();
+                miniCtx.closePath();
+            });
+
+            // draw drone as a round marker with directional needle
+            const dp = worldToMap(droneState.position.x, droneState.position.z, cssW, cssH);
+            const vx = droneState.velocity.x;
+            const vz = droneState.velocity.z;
+            // draw drone body
+            const droneR = 5;
+            miniCtx.beginPath();
+            miniCtx.fillStyle = '#00ff41';
+            miniCtx.arc(dp.x, dp.y, droneR, 0, Math.PI * 2);
+            miniCtx.fill();
+            miniCtx.closePath();
+            // draw directional needle based on velocity (or camera heading fallback)
+            let ux = 0, uz = 1; // default forward
+            if (Math.hypot(vx, vz) > 0.005) {
+                const m = Math.hypot(vx, vz);
+                ux = vx / m;
+                uz = vz / m;
+            }
+            // map to pixel space (note Z invert)
+            const lenPx = 14;
+            const dx = ux * (cssW / WORLD_SIZE) * lenPx;
+            const dy = -uz * (cssH / WORLD_SIZE) * lenPx;
+            miniCtx.beginPath();
+            miniCtx.strokeStyle = '#003300';
+            miniCtx.lineWidth = 2;
+            miniCtx.moveTo(dp.x, dp.y);
+            miniCtx.lineTo(dp.x + dx, dp.y + dy);
+            miniCtx.stroke();
+            miniCtx.closePath();
+            // small highlight at tip
+            miniCtx.beginPath();
+            miniCtx.fillStyle = '#001a00';
+            miniCtx.arc(dp.x + dx, dp.y + dy, 2.5, 0, Math.PI * 2);
+            miniCtx.fill();
+            miniCtx.closePath();
+
+            // border
+            miniCtx.strokeStyle = 'rgba(0,255,65,0.08)';
+            miniCtx.lineWidth = 1;
+            miniCtx.strokeRect(0.5, 0.5, cssW - 1, cssH - 1);
+        }
+
+        // add trail sample periodically
+        function sampleDroneTrail(dt) {
+            lastTrailTime += dt;
+            if (lastTrailTime >= TRAIL_INTERVAL) {
+                lastTrailTime = 0;
+                droneTrail.push({ x: droneState.position.x, z: droneState.position.z });
+                if (droneTrail.length > TRAIL_MAX) droneTrail.shift();
+            }
+        }
+
+        initMiniMap();
+
+        function logToConsole(message, type = 'info') {
+            const output = document.getElementById('consoleOutput');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Toast and pending UI helpers
+        let toastTimer = null;
+        function showToast(message, duration = 3000) {
+            const t = document.getElementById('toast');
+            t.textContent = message;
+            t.classList.add('show');
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { t.classList.remove('show'); }, duration);
+        }
+
+        function showPendingIndicator() {
+            const p = document.getElementById('nlPending');
+            if (p) p.style.display = 'inline';
+        }
+
+        function hidePendingIndicator() {
+            const p = document.getElementById('nlPending');
+            if (p) p.style.display = 'none';
+        }
+
+        // Natural language parsing and handling (simple keyword-based)
+        function parseNaturalLanguage(text) {
+            const t = text.toLowerCase();
+            // takeoff
+            if (t.includes('take off') || t.includes('takeoff') || t.includes('launch')) {
+                // optional altitude parse
+                const m = t.match(/(take off|takeoff|launch)( to)? (\d+(?:\.\d+)?)/);
+                const altitude = m ? parseFloat(m[3]) : undefined;
+                return { type: 'command', action: 'takeoff', altitude };
+            }
+            // land
+            if (t.includes('land') || t.includes('landing')) {
+                return { type: 'command', action: 'land' };
+            }
+            // hover
+            if (t.includes('hover') || t.includes('hold position') || t.includes('hold')) {
+                return { type: 'command', action: 'hover' };
+            }
+            // move / go to x z
+            // match patterns like: go to x 10 z -5 OR go to 10 -5
+            let m = t.match(/go to x\s*([\-\d\.]+)\s*z\s*([\-\d\.]+)/);
+            if (m) {
+                return { type: 'command', action: 'move', target: { x: parseFloat(m[1]), z: parseFloat(m[2]) } };
+            }
+            m = t.match(/go to\s*([\-\d\.]+)\s*([\-\d\.]+)/);
+            if (m) {
+                return { type: 'command', action: 'move', target: { x: parseFloat(m[1]), z: parseFloat(m[2]) } };
+            }
+            // navigate / patrol
+            if (t.includes('patrol') || t.includes('search')) {
+                return { type: 'command', action: 'patrol' };
+            }
+            if (t.includes('navigate') || t.includes('go to') || t.includes('goto')) {
+                return { type: 'command', action: 'navigate' };
+            }
+
+            // fallback: send as info command to backend
+            return { type: 'info', message: text };
+        }
+
+        function handleNaturalLanguage(text) {
+            logToConsole(`🗣️ NL: ${text}`, 'info');
+            const parsed = parseNaturalLanguage(text);
+            if (parsed.type === 'command') {
+                // apply locally
+                applyPythonCommand(parsed);
+                // show pending indicator while awaiting backend ACK
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.send(JSON.stringify({ type: 'nl_command', original: text, command: parsed }));
+                        showPendingIndicator();
+                    } catch (e) {
+                        logToConsole('Failed to send NL command: ' + e.message, 'error');
+                    }
+                }
+                logToConsole(`→ Parsed as: ${parsed.action}${parsed.altitude ? ' @' + parsed.altitude + 'm' : ''}${parsed.target ? ' to x:' + parsed.target.x + ' z:' + parsed.target.z : ''}`, 'python');
+                updateStatus();
+            } else if (parsed.type === 'info') {
+                // forward the raw message to backend if connected
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'nl_text', text }));
+                    showPendingIndicator();
+                }
+                logToConsole('Sent NL as info to backend', 'info');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('consoleOutput').innerHTML = '';
+        }
+
+        // Enhanced camera system
+        // Manual camera control: autoRotate disabled by default; user rotates with pointer drag and zooms with wheel.
+        let cameraDistance = 30;
+        let cameraHeight = 15;
+        let cameraAngle = 0;
+        let autoRotate = false; // set to true to re-enable slow automatic orbit
+
+        function updateCamera() {
+            if (autoRotate) cameraAngle += 0.005; // Slow orbit when enabled
+            const x = drone.position.x + Math.cos(cameraAngle) * cameraDistance;
+            const z = drone.position.z + Math.sin(cameraAngle) * cameraDistance;
+            const y = drone.position.y + cameraHeight;
+
+            camera.position.lerp(new THREE.Vector3(x, y, z), 0.02);
+            camera.lookAt(drone.position);
+        }
+
+        // Pointer (mouse/touch) controls for camera rotation and wheel/pinch for zoom
+        let isPointerDown = false;
+        let lastPointerX = 0, lastPointerY = 0;
+        // Sensitivities (user-adjustable via settings UI)
+        let angleSensitivity = 0.006; // horizontal drag sensitivity
+        let heightSensitivity = 0.05; // vertical drag sensitivity
+        let zoomSensitivity = 0.02; // wheel zoom sensitivity
+        const pinchScale = 0.12; // scale factor applied to pinch distance change
+
+        // Prevent default touch gestures (panning/zooming) on the canvas
+        renderer.domElement.style.touchAction = 'none';
+        renderer.domElement.style.cursor = 'grab';
+
+        // Support multiple pointers for pinch-to-zoom
+        const pointers = new Map();
+        let prevPinchDistance = null;
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            renderer.domElement.setPointerCapture(e.pointerId);
+
+            if (pointers.size === 1) {
+                // single-finger/mouse drag -> rotate
+                isPointerDown = true;
+                const p = pointers.values().next().value;
+                lastPointerX = p.x;
+                lastPointerY = p.y;
+                renderer.domElement.style.cursor = 'grabbing';
+            } else if (pointers.size >= 2) {
+                // start pinch
+                isPointerDown = false;
+                const it = pointers.values();
+                const p1 = it.next().value;
+                const p2 = it.next().value;
+                prevPinchDistance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            }
+        });
+
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (!pointers.has(e.pointerId)) return;
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (pointers.size === 1 && isPointerDown) {
+                const p = pointers.values().next().value;
+                const deltaX = p.x - lastPointerX;
+                const deltaY = p.y - lastPointerY;
+                lastPointerX = p.x;
+                lastPointerY = p.y;
+
+                // Update angle and height based on pointer movement
+                cameraAngle -= deltaX * angleSensitivity;
+                cameraHeight += deltaY * heightSensitivity;
+                cameraHeight = Math.max(5, Math.min(80, cameraHeight));
+            } else if (pointers.size >= 2) {
+                // pinch-to-zoom
+                const it = pointers.values();
+                const p1 = it.next().value;
+                const p2 = it.next().value;
+                const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                if (prevPinchDistance !== null) {
+                    const diff = dist - prevPinchDistance;
+                    cameraDistance -= diff * pinchScale * zoomSensitivity;
+                    cameraDistance = Math.max(5, Math.min(200, cameraDistance));
+                }
+                prevPinchDistance = dist;
+            }
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            pointers.delete(e.pointerId);
+            try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (err) {}
+
+            if (pointers.size === 0) {
+                isPointerDown = false;
+                prevPinchDistance = null;
+                renderer.domElement.style.cursor = 'grab';
+            } else if (pointers.size === 1) {
+                // Continue with the remaining pointer as the drag source
+                const p = pointers.values().next().value;
+                lastPointerX = p.x;
+                lastPointerY = p.y;
+                isPointerDown = true;
+                renderer.domElement.style.cursor = 'grabbing';
+            }
+        });
+
+        renderer.domElement.addEventListener('pointercancel', (e) => {
+            pointers.delete(e.pointerId);
+            prevPinchDistance = null;
+            isPointerDown = false;
+            renderer.domElement.style.cursor = 'grab';
+        });
+
+        // Wheel to zoom in/out (uses zoomSensitivity)
+        renderer.domElement.addEventListener('wheel', (e) => {
+            cameraDistance += e.deltaY * zoomSensitivity;
+            cameraDistance = Math.max(5, Math.min(200, cameraDistance));
+            e.preventDefault();
+        }, { passive: false });
+
+        // UI: Auto-rotate toggle and camera settings panel wiring
+        const autoRotateBtn = document.getElementById('autoRotateBtn');
+        const cameraSettingsBtn = document.getElementById('cameraSettingsBtn');
+
+        autoRotateBtn.addEventListener('click', () => {
+            autoRotate = !autoRotate;
+            autoRotateBtn.textContent = `Auto-Rotate: ${autoRotate ? 'On' : 'Off'}`;
+            if (autoRotate) autoRotateBtn.classList.add('btn-ghost'); else autoRotateBtn.classList.remove('btn-ghost');
+        });
+
+        // Insert camera settings UI (created below in DOM) handlers after DOM creation
+
+        // Event handlers
+        document.getElementById('connectBtn').addEventListener('click', connectToPython);
+        // obstacle panel handlers (buttons are placed in the Obstacle panel)
+        const addObstacleBtn = document.getElementById('addObstacleBtn');
+        const clearObstaclesBtn = document.getElementById('clearObstaclesBtn');
+        if (addObstacleBtn) addObstacleBtn.addEventListener('click', () => { addRandomObstacle(); logToConsole('➕ Obstacle added', 'info'); });
+        if (clearObstaclesBtn) clearObstaclesBtn.addEventListener('click', () => { clearObstacles(); logToConsole('🧹 Cleared obstacles', 'info'); });
+
+        // Top control: toggle obstacle panel visibility
+        const toggleObstaclePanelBtn = document.getElementById('toggleObstaclePanelBtn');
+        if (toggleObstaclePanelBtn) {
+            toggleObstaclePanelBtn.addEventListener('click', () => {
+                const panel = document.getElementById('obstaclePanel');
+                if (!panel) return;
+                panel.classList.toggle('hidden');
+                // visual hint
+                toggleObstaclePanelBtn.classList.toggle('btn-ghost');
+                toggleObstaclePanelBtn.textContent = panel.classList.contains('hidden') ? 'Obstacles: Off' : 'Obstacles';
+            });
+        }
+
+        // Top control: toggle console logs (mirrors bottom Console button)
+        const topConsoleToggleBtn = document.getElementById('topConsoleToggleBtn');
+        if (topConsoleToggleBtn) {
+            topConsoleToggleBtn.addEventListener('click', () => {
+                const consoleEl = document.getElementById('console');
+                if (!consoleEl) return;
+                consoleEl.classList.toggle('visible');
+                topConsoleToggleBtn.classList.toggle('btn-ghost');
+            });
+        }
+        // Natural language input handler
+        document.getElementById('nlSendBtn').addEventListener('click', () => {
+            const input = document.getElementById('nlInput');
+            const text = input.value.trim();
+            if (!text) return;
+            handleNaturalLanguage(text);
+            input.value = '';
+        });
+        document.getElementById('nlInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('nlSendBtn').click();
+            }
+        });
+        document.getElementById('startBtn').addEventListener('click', () => {
+            missionActive = true;
+            droneState.startTime = Date.now();
+            updateStatus();
+            logToConsole('🚀 Mission started - Python control active', 'info');
+        });
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            missionActive = false;
+            updateStatus();
+            logToConsole('⏹️ Mission stopped', 'warning');
+        });
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            droneState.position.set(0, 8, 0);
+            droneState.velocity.set(0, 0, 0);
+            droneState.rotation.set(0, 0, 0);
+            droneState.battery = 100;
+            missionActive = false;
+            updateStatus();
+            logToConsole('🔄 Simulation reset', 'info');
+        });
+
+        // Console toggle
+        document.getElementById('consoleToggle').addEventListener('click', () => {
+            const console = document.getElementById('console');
+            console.classList.toggle('visible');
+        });
+
+        // Animation loop
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const deltaTime = clock.getDelta();
+            
+            updateDronePhysics(deltaTime);
+            updateCamera();
+            updateTelemetry();
+            sampleDroneTrail(deltaTime);
+            updateMiniMap();
+
+            // if camera focus active, lerp camera to focus position
+            if (cameraFocusActive) {
+                // move cameraAngle so camera centers on focus position
+                const desiredX = cameraFocusPos.x + Math.cos(cameraAngle) * cameraDistance;
+                const desiredZ = cameraFocusPos.z + Math.sin(cameraAngle) * cameraDistance;
+                const desiredPos = new THREE.Vector3(desiredX, cameraFocusPos.y + cameraHeight, desiredZ);
+                camera.position.lerp(desiredPos, 0.08);
+                camera.lookAt(cameraFocusPos.x, cameraFocusPos.y - 2, cameraFocusPos.z);
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Initialize
+        updateStatus();
+        logToConsole('🚁 Drone Simulator Ready', 'info');
+        logToConsole('Click "Connect Python" to begin integration', 'info');
+
+        // Camera settings UI wiring
+        (function setupCameraSettingsUI(){
+            const cameraSettings = document.getElementById('cameraSettings');
+            const cameraSettingsBtn = document.getElementById('cameraSettingsBtn');
+            const angleRange = document.getElementById('angleRange');
+            const heightRange = document.getElementById('heightRange');
+            const zoomRange = document.getElementById('zoomRange');
+            const angleVal = document.getElementById('angleVal');
+            const heightVal = document.getElementById('heightVal');
+            const zoomVal = document.getElementById('zoomVal');
+            const cameraResetBtn = document.getElementById('cameraResetBtn');
+            const cameraCloseBtn = document.getElementById('cameraCloseBtn');
+
+            const defaults = {
+                angleSensitivity: 0.006,
+                heightSensitivity: 0.05,
+                zoomSensitivity: 0.02
+            };
+
+            // sync UI from variables
+            function syncUI() {
+                angleRange.value = angleSensitivity;
+                heightRange.value = heightSensitivity;
+                zoomRange.value = zoomSensitivity;
+                angleVal.textContent = Number(angleSensitivity).toFixed(3);
+                heightVal.textContent = Number(heightSensitivity).toFixed(3);
+                zoomVal.textContent = Number(zoomSensitivity).toFixed(3);
+            }
+
+            cameraSettingsBtn.addEventListener('click', () => {
+                cameraSettings.classList.toggle('hidden');
+                if (!cameraSettings.classList.contains('hidden')) {
+                    syncUI();
+                }
+            });
+
+            angleRange.addEventListener('input', (e) => {
+                angleSensitivity = Number(e.target.value);
+                angleVal.textContent = angleSensitivity.toFixed(3);
+            });
+            heightRange.addEventListener('input', (e) => {
+                heightSensitivity = Number(e.target.value);
+                heightVal.textContent = heightSensitivity.toFixed(3);
+            });
+            zoomRange.addEventListener('input', (e) => {
+                zoomSensitivity = Number(e.target.value);
+                zoomVal.textContent = zoomSensitivity.toFixed(3);
+            });
+
+            cameraResetBtn.addEventListener('click', () => {
+                angleSensitivity = defaults.angleSensitivity;
+                heightSensitivity = defaults.heightSensitivity;
+                zoomSensitivity = defaults.zoomSensitivity;
+                syncUI();
+            });
+
+            cameraCloseBtn.addEventListener('click', () => {
+                cameraSettings.classList.add('hidden');
+            });
+        })();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
