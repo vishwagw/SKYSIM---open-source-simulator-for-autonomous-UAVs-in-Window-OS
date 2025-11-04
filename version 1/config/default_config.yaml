@@ -1,0 +1,99 @@
+# Simulation Configuration
+simulation:
+  timestep: 0.01  # seconds
+  duration: 120   # seconds
+  real_time: true # Run in real-time or as fast as possible
+
+# Drone Configuration
+drone:
+  # Drone model selection - available models:
+  # - micro_quad: Micro Quadcopter (0.15kg)
+  # - racing_quad: Racing Quadcopter (0.8kg) 
+  # - consumer_quad: Consumer Quadcopter (1.5kg)
+  # - heavy_lift: Heavy Lift Hexacopter (4.5kg)
+  # - vtol_wing: VTOL Fixed-Wing (3.2kg)
+  model: "consumer_quad"
+  
+  # Physical properties (will be overridden by model selection)
+  mass: 1.5      # kg
+  max_thrust: 20.0  # N
+  max_angular_velocity: 5.0  # rad/s
+  drag_coefficient: 0.1
+  moment_of_inertia: [0.1, 0.1, 0.15]  # [Ixx, Iyy, Izz]
+  
+  # Initial conditions
+  initial_position: [0.0, 0.0, 0.0]  # [x, y, z] meters
+  initial_velocity: [0.0, 0.0, 0.0]  # [vx, vy, vz] m/s
+  initial_orientation: [0.0, 0.0, 0.0]  # [roll, pitch, yaw] radians
+
+# Environment Configuration
+environment:
+  gravity: 9.81  # m/s^2
+  air_density: 1.225  # kg/m^3
+  
+  # Wind configuration
+  wind:
+    enabled: true
+    base_velocity: [2.0, 1.0, 0.5]  # [x, y, z] m/s
+    turbulence: 0.5  # turbulence factor
+    
+  # Boundaries
+  boundaries:
+    x_min: -50.0
+    x_max: 50.0
+    y_min: -50.0
+    y_max: 50.0
+    z_min: 0.0
+    z_max: 30.0
+
+# Obstacles
+obstacles:
+  - type: "sphere"
+    position: [10.0, 10.0, 5.0]
+    radius: 2.0
+  - type: "box"
+    position: [20.0, -15.0, 3.0]
+    dimensions: [4.0, 4.0, 6.0]
+  - type: "cylinder"
+    position: [-10.0, 20.0, 0.0]
+    radius: 1.5
+    height: 8.0
+
+# Sensors
+sensors:
+  gps:
+    enabled: true
+    noise_std: 0.1  # meters
+    update_rate: 10  # Hz
+    
+  imu:
+    enabled: true
+    accel_noise_std: 0.01  # m/s^2
+    gyro_noise_std: 0.001  # rad/s
+    update_rate: 100  # Hz
+    
+  lidar:
+    enabled: true
+    range: 20.0  # meters
+    resolution: 360  # points per scan
+    noise_std: 0.05  # meters
+    update_rate: 20  # Hz
+
+# Visualization
+visualization:
+  enabled: true
+  window_size: [1200, 800]
+  camera_follow: true
+  show_trajectory: true
+  trajectory_length: 100
+  show_sensors: true
+  update_rate: 30  # Hz
+
+# Logging
+logging:
+  enabled: true
+  log_level: "INFO"
+  save_trajectory: true
+  save_sensor_data: true
+  save_control_inputs: true
+  output_directory: "logs/"
